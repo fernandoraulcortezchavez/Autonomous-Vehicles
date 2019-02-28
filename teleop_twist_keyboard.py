@@ -45,10 +45,7 @@ moveBindings = {
     }
 
 speedBindings={
-        'z':(1,1),
-        'x':(1,1),
-        'c':(1,1),
-    }
+}
 
 # Declare global variables for topics
 pub = None
@@ -59,6 +56,7 @@ speed = 1
 turn = 1
 manual_mode = True
 circle_mode = False
+controller_on = True
 
 def on_press(key):
     #print("On press")
@@ -69,6 +67,7 @@ def on_press(key):
     global speed
     global turn
     global circle_mode
+    global controller_on
 
     if pub is None or takeoff is None or land is None or reset is None:
         return
@@ -108,19 +107,17 @@ def on_press(key):
         empty = Empty()
         reset.publish(empty)
         print("Reset")
+    elif key.char == '0':
+        print("Turning off controller")
+	circle_mode = False
+	controller_on = False
+        empty = Empty()
+        land.publish(empty)
 
     # Routine keys
     elif key.char == 'c':
+        print('Circle')
         circle_mode = True
-        x = 0.2
-        y = 0
-        z = 0
-        th = 0.8
-        twist = Twist()
-        twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
-        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
-        pub.publish(twist)
-        print(x,y,z,th)
 
 
 def on_release(key):
@@ -130,6 +127,7 @@ def on_release(key):
     global reset
     global speed
     global turn
+    global controller_on
     
     if pub is None or takeoff is None or land is None or reset is None:
         return False
@@ -139,6 +137,9 @@ def on_release(key):
     if key != Key.shift_r and key != Key.shift_l:
         print('{0} release'.format(
         key))
+    if key.char == '0':
+        controller_on = False
+        return False
     if key.char in moveBindings.keys():
         x = 0
         y = 0
@@ -156,7 +157,7 @@ def vels(speed,turn):
 
 if __name__=="__main__":
     key_listener = Listener(on_press=on_press, on_release=on_release) 
-    pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 1)
+    pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 8)
     takeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size = 1)
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
     reset = rospy.Publisher('bebop/reset', Empty, queue_size = 1)
@@ -164,6 +165,7 @@ if __name__=="__main__":
 
     speed = rospy.get_param("~speed", 0.2)
     turn = rospy.get_param("~turn", 1.0)
+    rate = rospy.Rate(5)
     x = 0
     y = 0
     z = 0
@@ -172,9 +174,27 @@ if __name__=="__main__":
     
     try:
 	key_listener.start()
-        print(msg)
-        print(vels(speed,turn))
-        #while(1):
+        #print(msg)
+        #print(vels(speed,turn))
+        print("STARTING")
+        while(controller_on):
+            print("Main loop")
+            print(controller_on)
+            if(circle_mode):
+                x = 0.2
+                y = 0.0
+                z = 0.0
+                th = 0.8
+                print('Speeds')
+                twist = Twist()
+                twist.linear.x = x*1; twist.linear.y = y*1; twist.linear.z = z*1;
+                twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*1
+                while(circle_mode): 
+                    pub.publish(twist)
+                    print(x,y,z,th)
+                    rate.sleep() # Ensure the circle_mode loops 5 times per second
+            rate.sleep()
+        print("Waiting for key controller to end")
         key_listener.join()
             
     except Exception as e:
@@ -185,3 +205,5 @@ if __name__=="__main__":
         twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
         twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
         pub.publish(twist)
+        empty = Empty()
+        land.publish(empty)
