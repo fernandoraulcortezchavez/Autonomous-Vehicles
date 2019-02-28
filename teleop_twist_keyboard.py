@@ -190,12 +190,12 @@ def get_odometry(msg):
 	quaternion_list = [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
         (roll, pitch, yaw) = euler_from_quaternion(quaternion_list)
         global_pose[3] = yaw
-        print(global_pose)
+        print("Global Pose: ", global_pose)
 
 def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
-    kp_x, kp_y, kp_theta = 0.2, 0.2, 0.1
-    threshold_distance = 0.10
-    threshold_angle = np.pi/10
+    kp_x, kp_y, kp_theta = 0.05, 0.05, 0.05
+    threshold_distance = 0.08
+    threshold_angle = np.pi/8
 
     pose_current = np.array([[pose_current_list[0]], [pose_current_list[1]], [pose_current_list[3]]], np.float32) 
     pose_goal = np.array([[pose_goal_list[0]], [pose_goal_list[1]], [pose_goal_list[3]]], np.float32) 
@@ -206,7 +206,7 @@ def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
     
     # Calculate Euclidian distance from quadcopter to goal
     linear_distance =  np.sqrt(np.square(delta_pose[0][0]) + np.square(delta_pose[1][0]))
-    #print(linear_distance)
+    print("Linear Distance: ", linear_distance)
 
     # Check if quadcopter is near the goal
     if linear_distance <= threshold_distance:
@@ -243,9 +243,18 @@ def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
     #print(rotation_matrix)
     return [v_x, v_y, 0.0, 0.0, False]
 
+def GenerateCirclePoses(radius, num_points, angle):
+    poses_list = []
+    for i in range(num_points):
+        px = radius * np.cos(2*np.pi*i/num_points)
+        py = radius * np.sin(2*np.pi*i/num_points)
+        pose = [px, py, 0.0, angle]
+        poses_list.append(pose)
+    return poses_list
+
 if __name__=="__main__":
     key_listener = Listener(on_press=on_press, on_release=on_release) 
-    pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 8)
+    pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 10)
     takeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size = 1)
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
     reset = rospy.Publisher('bebop/reset', Empty, queue_size = 1)
@@ -254,7 +263,7 @@ if __name__=="__main__":
 
     speed = rospy.get_param("~speed", 0.2)
     turn = rospy.get_param("~turn", 1.0)
-    rate = rospy.Rate(5)
+    rate = rospy.Rate(10)
     x = 0
     y = 0
     z = 0
@@ -268,52 +277,4 @@ if __name__=="__main__":
         print("STARTING")
         while(controller_on):
             print("Main loop")
-            print(controller_on)
-            if(circle_mode):
-                x = 0.2
-                y = 0.0
-                z = 0.0
-                th = 0.4
-                print('Speeds')
-                twist = Twist()
-                twist.linear.x = x*1; twist.linear.y = y*1; twist.linear.z = z*1;
-                twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*1
-                while(circle_mode): 
-                    pub.publish(twist)
-                    print(x,y,z,th)
-                    rate.sleep() # Ensure the circle_mode loops 5 times per second
-	    if(trajectory_mode):
-                pose_goal = [0.50, -0.50, 0.0, 0.0]
-		while(trajectory_mode):
-		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
-		    if required_speeds[4]:
-			# Made it to the goal
-			twist = Twist()
-                        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
-                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-                        pub.publish(twist)
-			trajectory_mode = False
-                        empty = Empty()
-                        land.publish(empty)
-			trajectory_mode = False
-		        break
-		    else:
-			twist = Twist()
-                        twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
-                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
-                        pub.publish(twist)
-		    rate.sleep() # Ensure the circle_mode loops 5 times per second	
-            rate.sleep()
-        print("Waiting for key controller to end")
-        key_listener.join()
-            
-    except Exception as e:
-        print(e)
-
-    finally:
-        twist = Twist()
-        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
-        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
-        pub.publish(twist)
-        empty = Empty()
-        land.publish(empty)
+            print(controller
