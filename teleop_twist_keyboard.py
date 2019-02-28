@@ -277,4 +277,90 @@ if __name__=="__main__":
         print("STARTING")
         while(controller_on):
             print("Main loop")
-            print(controller
+            print(controller_on)
+            #if(circle_mode):
+            #    x = 0.2
+            #    y = 0.0
+            #    z = 0.0
+            #    th = 0.4
+            #    print('Speeds')
+            #    twist = Twist()
+            #    twist.linear.x = x*1; twist.linear.y = y*1; twist.linear.z = z*1;
+            #    twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*1
+            #    while(circle_mode): 
+            #        pub.publish(twist)
+            #        print(x,y,z,th)
+            #        rate.sleep() # Ensure the circle_mode loops 5 times per second
+            if(circle_mode):
+                poses_circle = GenerateCirclePoses(0.5, 8, np.pi/2)
+                goal_number = 0
+                pose_goal = poses_circle[0]
+                while(circle_mode):
+		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
+		    if required_speeds[4] and goal_number >= len(poses_circle)-1:
+                        print("FINISHED")
+			# Made it to the goal
+			twist = Twist()
+                        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+                        pub.publish(twist)
+                        QuadLand()
+                        circle_mode = False
+                        sleep(4)
+                    elif required_speeds[4] and goal_number < len(poses_circle)-1:
+                        # Reached one of the points
+                        goal_number += 1
+                        pose_goal = poses_circle[goal_number] 
+                    else:
+                        # Try to reach next goal
+                        twist = Twist()
+                        twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
+                        pub.publish(twist)
+                     
+                
+	    if(trajectory_mode):
+                pose_goal = [0.80, -1.0, 0.0, global_pose[3]]
+                halfWay = False
+		while(trajectory_mode):
+		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
+                    print("Required speeds: ", required_speeds)
+		    if required_speeds[4]:
+			# Made it to the goal
+			twist = Twist()
+                        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+                        pub.publish(twist)
+                        QuadLand()
+                        sleep(4)
+                        print("MADE IT")
+ 
+                        # Check if it finished the first half of trajectory
+                        if not halfWay:
+                            halfWay = True
+                            pose_goal = [0.0, 0.0, 0.0, 0.0]
+                            QuadTakeoff()
+                        else:
+                            # Finished both halves of trajectory
+                            trajectory_mode = False
+		            break
+		    else:
+			twist = Twist()
+                        twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
+                        pub.publish(twist)
+		    rate.sleep() # Ensure the circle_mode loops 5 times per second	
+            rate.sleep()
+        print("Waiting for key controller to end")
+        key_listener.join()
+            
+    except Exception as e:
+        print(e)
+
+    finally:
+        twist = Twist()
+        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+        pub.publish(twist)
+        empty = Empty()
+        land.publish(empty)
