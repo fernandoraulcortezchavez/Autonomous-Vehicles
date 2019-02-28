@@ -10,6 +10,7 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import sys
+import numpy as np
 from time import sleep
 from pynput.keyboard import Key, Listener
 
@@ -62,6 +63,15 @@ trajectory_mode = False
 controller_on = True
 global_pose = [0.0, 0.0, 0.0, 0.0]
 
+def QuadLand():
+    global land
+    empty = Empty()
+    land.publish(empty)
+
+def QuadTakeoff():
+    global takeoff
+    empty = Empty()
+    takeoff.publish(empty)
 
 def on_press(key):
     #print("On press")
@@ -83,6 +93,7 @@ def on_press(key):
     # Movement keys
     if key.char in moveBindings.keys():
         circle_mode = False
+        trajectory_mode = False
         x = moveBindings[key.char][0]
         y = moveBindings[key.char][1]
         z = moveBindings[key.char][2]
@@ -93,9 +104,9 @@ def on_press(key):
         pub.publish(twist)
         print(x,y,z,th)
         
-    elif key.char in speedBindings.keys():
-        speed = speed * speedBindings[key][0]
-        turn = turn * speedBindings[key][1]
+    #elif key.char in speedBindings.keys():
+    #    speed = speed * speedBindings[key][0]
+    #    turn = turn * speedBindings[key][1]
 
     # Control keys
     elif key.char == 'v':
@@ -129,6 +140,9 @@ def on_press(key):
         print('Circle')
         circle_mode = True
 	trajectory_mode = False
+    elif key.char == 't':
+        circle_mode = False
+	trajectory_mode = True
 
 
 def on_release(key):
@@ -168,6 +182,7 @@ def vels(speed,turn):
 
 def get_odometry(msg):
         global global_pose
+        print(len(global_pose))
         global_pose[0] = msg.pose.pose.position.x
         global_pose[1] = msg.pose.pose.position.y
         global_pose[2] = msg.pose.pose.position.z
@@ -178,17 +193,12 @@ def get_odometry(msg):
         print(global_pose)
 
 def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
-    kp_x, kp_y, kp_theta = 0.4, 0.4, 0.1
-    threshold_distance = 0.05
+    kp_x, kp_y, kp_theta = 0.2, 0.2, 0.1
+    threshold_distance = 0.10
     threshold_angle = np.pi/10
 
-    # Remove z from both pose lists, since it won't change
-    pose_current_list.pop(2) 
-    pose_goal_list.pop(2)
-
-    # Convert poses to vertical np array vectors
-    pose_current = np.transpose(np.array([pose_current_list], np.float32))
-    pose_goal = np.transpose(np.array([pose_goal_list], np.float32))
+    pose_current = np.array([[pose_current_list[0]], [pose_current_list[1]], [pose_current_list[3]]], np.float32) 
+    pose_goal = np.array([[pose_goal_list[0]], [pose_goal_list[1]], [pose_goal_list[3]]], np.float32) 
     
     # Obtain delta of goal and current poses (direction vector in the global frame)
     delta_pose = pose_goal - pose_current    
@@ -263,7 +273,7 @@ if __name__=="__main__":
                 x = 0.2
                 y = 0.0
                 z = 0.0
-                th = 0.8
+                th = 0.4
                 print('Speeds')
                 twist = Twist()
                 twist.linear.x = x*1; twist.linear.y = y*1; twist.linear.z = z*1;
@@ -273,7 +283,7 @@ if __name__=="__main__":
                     print(x,y,z,th)
                     rate.sleep() # Ensure the circle_mode loops 5 times per second
 	    if(trajectory_mode):
-                pose_goal = [1.3, 1.5, 0.0, 0.5]
+                pose_goal = [0.50, -0.50, 0.0, 0.0]
 		while(trajectory_mode):
 		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
 		    if required_speeds[4]:
