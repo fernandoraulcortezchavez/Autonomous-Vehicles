@@ -6,7 +6,9 @@ import roslib; roslib.load_manifest('teleop_twist_keyboard')
 import rospy
 
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Empty
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import sys
 from time import sleep
 from pynput.keyboard import Key, Listener
@@ -57,6 +59,7 @@ turn = 1
 manual_mode = True
 circle_mode = False
 controller_on = True
+global_pose = [0.0, 0.0, 0.0, 0.0]
 
 def on_press(key):
     #print("On press")
@@ -155,12 +158,24 @@ def on_release(key):
 def vels(speed,turn):
     return "currently:\tspeed %s\tturn %s " % (speed,turn)
 
+def get_odometry(msg):
+        global global_pose
+        global_pose[0] = msg.pose.pose.position.x
+        global_pose[1] = msg.pose.pose.position.y
+        global_pose[2] = msg.pose.pose.position.z
+	quaternion = msg.pose.pose.orientation
+	quaternion_list = [quaternion.x, quaternion.y, quaternion.z, quaternion.w]
+        (roll, pitch, yaw) = euler_from_quaternion(quaternion_list)
+        global_pose[3] = yaw
+        print(global_pose)
+
 if __name__=="__main__":
     key_listener = Listener(on_press=on_press, on_release=on_release) 
     pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 8)
     takeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size = 1)
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
     reset = rospy.Publisher('bebop/reset', Empty, queue_size = 1)
+    odom = rospy.Subscriber('bebop/odom', Odometry, get_odometry)
     rospy.init_node('teleop_twist_keyboard')
 
     speed = rospy.get_param("~speed", 0.2)
