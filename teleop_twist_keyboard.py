@@ -6,9 +6,9 @@ import roslib; roslib.load_manifest('teleop_twist_keyboard')
 import rospy
 
 from geometry_msgs.msg import Twist
-from geometry_msgs.msg import Empty
+from std_msgs.msg import Empty
 import sys
-import time
+from time import sleep
 from pynput.keyboard import Key, Listener
 
 msg = """
@@ -55,24 +55,33 @@ pub = None
 takeoff = None
 land = None
 reset = None
-
+speed = 1
+turn = 1
+manual_mode = True
+circle_mode = False
 
 def on_press(key):
+    #print("On press")
     global pub
     global takeoff
     global land
     global reset
-    
+    global speed
+    global turn
+    global circle_mode
+
+    if pub is None or takeoff is None or land is None or reset is None:
+        return
     if key != Key.shift_r and key != Key.shift_l:
         print('{0} pressed'.format(
         key))
-        
     # Movement keys
     if key.char in moveBindings.keys():
-        x = moveBindings[key][0]
-        y = moveBindings[key][1]
-        z = moveBindings[key][2]
-        th = moveBindings[key][3]
+        circle_mode = False
+        x = moveBindings[key.char][0]
+        y = moveBindings[key.char][1]
+        z = moveBindings[key.char][2]
+        th = moveBindings[key.char][3]
         twist = Twist()
         twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
         twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
@@ -85,22 +94,45 @@ def on_press(key):
 
     # Control keys
     elif key.char == 'v':
+        circle_mode = False
         empty = Empty()
         takeoff.publish(empty)
+        print("Takeoff")
     elif key.char == 'b':
+        circle_mode = False
         empty = Empty()
         land.publish(empty)
+        print("Land")
     elif key.char == 'n':
+        circle_mode = False
         empty = Empty()
         reset.publish(empty)
-                     
+        print("Reset")
+
+    # Routine keys
+    elif key.char == 'c':
+        circle_mode = True
+        x = 0.2
+        y = 0
+        z = 0
+        th = 0.8
+        twist = Twist()
+        twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
+        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
+        pub.publish(twist)
+        print(x,y,z,th)
+
 
 def on_release(key):
     global pub
     global takeoff
     global land
     global reset
+    global speed
+    global turn
     
+    if pub is None or takeoff is None or land is None or reset is None:
+        return False
     if key == Key.esc:
         # Stop listener
         return False
@@ -123,11 +155,7 @@ def vels(speed,turn):
     return "currently:\tspeed %s\tturn %s " % (speed,turn)
 
 if __name__=="__main__":
-    global pub
-    global takeoff
-    global land
-    global reset
-    
+    key_listener = Listener(on_press=on_press, on_release=on_release) 
     pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 1)
     takeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size = 1)
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
@@ -143,10 +171,11 @@ if __name__=="__main__":
     status = 0
     
     try:
+	key_listener.start()
         print(msg)
         print(vels(speed,turn))
-        while(1):
-            time.sleep(0.001)
+        #while(1):
+        key_listener.join()
             
     except Exception as e:
         print(e)
