@@ -7,8 +7,9 @@ import rospy
 
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Empty
-
-import sys, select, termios, tty
+import sys
+import time
+from pynput.keyboard import Key, Listener
 
 msg = """
 Reading from the keyboard  and Publishing to Twist!
@@ -49,20 +50,84 @@ speedBindings={
         'c':(1,1),
     }
 
-def getKey():
-    tty.setraw(sys.stdin.fileno())
-    select.select([sys.stdin], [], [], 0)
-    key = sys.stdin.read(1)
-    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
-    return key
+# Declare global variables for topics
+pub = None
+takeoff = None
+land = None
+reset = None
 
+
+def on_press(key):
+    global pub
+    global takeoff
+    global land
+    global reset
+    
+    if key != Key.shift_r and key != Key.shift_l:
+        print('{0} pressed'.format(
+        key))
+        
+    # Movement keys
+    if key.char in moveBindings.keys():
+        x = moveBindings[key][0]
+        y = moveBindings[key][1]
+        z = moveBindings[key][2]
+        th = moveBindings[key][3]
+        twist = Twist()
+        twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
+        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
+        pub.publish(twist)
+        print(x,y,z,th)
+        
+    elif key.char in speedBindings.keys():
+        speed = speed * speedBindings[key][0]
+        turn = turn * speedBindings[key][1]
+
+    # Control keys
+    elif key.char == 'v':
+        empty = Empty()
+        takeoff.publish(empty)
+    elif key.char == 'b':
+        empty = Empty()
+        land.publish(empty)
+    elif key.char == 'n':
+        empty = Empty()
+        reset.publish(empty)
+                     
+
+def on_release(key):
+    global pub
+    global takeoff
+    global land
+    global reset
+    
+    if key == Key.esc:
+        # Stop listener
+        return False
+    if key != Key.shift_r and key != Key.shift_l:
+        print('{0} release'.format(
+        key))
+    if key.char in moveBindings.keys():
+        x = 0
+        y = 0
+        z = 0
+        th = 0
+        twist = Twist()
+        twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
+        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
+        pub.publish(twist)
+        print(x,y,z,th)
+    
 
 def vels(speed,turn):
     return "currently:\tspeed %s\tturn %s " % (speed,turn)
 
 if __name__=="__main__":
-    settings = termios.tcgetattr(sys.stdin)
-
+    global pub
+    global takeoff
+    global land
+    global reset
+    
     pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 1)
     takeoff = rospy.Publisher('bebop/takeoff', Empty, queue_size = 1)
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
@@ -76,49 +141,13 @@ if __name__=="__main__":
     z = 0
     th = 0
     status = 0
-
+    
     try:
         print(msg)
         print(vels(speed,turn))
         while(1):
-            key = getKey()
-            print(key)
-            if key in moveBindings.keys():
-                x = moveBindings[key][0]
-                y = moveBindings[key][1]
-                z = moveBindings[key][2]
-                th = moveBindings[key][3]
-            elif key in speedBindings.keys():
-                speed = speed * speedBindings[key][0]
-                turn = turn * speedBindings[key][1]
-
-                print(vels(speed,turn))
-                if (status == 14):
-                    print(msg)
-                status = (status + 1) % 15
-            elif key == 'v':
-               empty = Empty()
-               takeoff.publish(empty)
-            elif key == 'b':
-               empty = Empty()
-               land.publish(empty)
-            elif key == 'n':
-               empty = Empty()
-               reset.publish(empty)
-            else:
-                x = 0
-                y = 0
-                z = 0
-                th = 0
-                if (key == '\x03'):
-                    break
-
-            twist = Twist()
-            twist.linear.x = x*speed; twist.linear.y = y*speed; twist.linear.z = z*speed;
-            twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = th*turn
-            pub.publish(twist)
-            print(x,y,z,th)
-
+            time.sleep(0.001)
+            
     except Exception as e:
         print(e)
 
@@ -127,5 +156,3 @@ if __name__=="__main__":
         twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
         twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
         pub.publish(twist)
-
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
