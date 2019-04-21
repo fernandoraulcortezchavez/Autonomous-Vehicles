@@ -1,20 +1,20 @@
 import numpy as np
 
-def DetermineControllerSpeeds():
+def DetermineControllerSpeeds(pose_goal, pose_current):
     kp_x, kp_y, kp_theta = 0.4, 0.4, 0.1
     threshold_distance = 0.55
     threshold_angle = np.pi/10
-    #controller_constants = np.arra
-    pose_goal = np.array([[5.0], [4.0], [0.0]], np.float32)
-    pose_current = np.array([[5.0], [4.1], [np.pi/2]], np.float32)
+    
+    #pose_goal = np.array([[5.0], [4.0], [0.0]], np.float32)
+    #pose_current = np.array([[5.0], [4.1], [np.pi/2]], np.float32)
 
     # Obtain delta of goal and current poses (direction vector in the global frame)
     delta_pose = pose_goal - pose_current    
-    print(delta_pose)
+    #print(delta_pose)
     
     # Calculate Euclidian distance from quadcopter to goal
     linear_distance =  np.sqrt(np.square(delta_pose[0][0]) + np.square(delta_pose[1][0]))
-    print(linear_distance)
+    #print(linear_distance)
 
     # Check if quadcopter is near the goal
     if linear_distance <= threshold_distance:
@@ -47,7 +47,6 @@ def DetermineControllerSpeeds():
     if abs(v_y) > 1.0:
         v_y /= abs(v_y) # Transform y speed to 1 or -1 if it is too big
 
-    
-    print(delta_pose_local)
-    print(rotation_matrix)
+    #print(delta_pose_local)
+    #print(rotation_matrix)
     return [v_x, v_y, 0.0, False]
