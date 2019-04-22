@@ -58,8 +58,10 @@ speed = 1
 turn = 1
 manual_mode = True
 circle_mode = False
+trajectory_mode = False
 controller_on = True
 global_pose = [0.0, 0.0, 0.0, 0.0]
+
 
 def on_press(key):
     #print("On press")
@@ -71,6 +73,7 @@ def on_press(key):
     global turn
     global circle_mode
     global controller_on
+    global trajectory_mode
 
     if pub is None or takeoff is None or land is None or reset is None:
         return
@@ -97,22 +100,26 @@ def on_press(key):
     # Control keys
     elif key.char == 'v':
         circle_mode = False
+	trajectory_mode = False
         empty = Empty()
         takeoff.publish(empty)
         print("Takeoff")
     elif key.char == 'b':
         circle_mode = False
+	trajectory_mode = False
         empty = Empty()
         land.publish(empty)
         print("Land")
     elif key.char == 'n':
         circle_mode = False
+	trajectory_mode = False
         empty = Empty()
         reset.publish(empty)
         print("Reset")
     elif key.char == '0':
         print("Turning off controller")
 	circle_mode = False
+	trajectory_mode = False
 	controller_on = False
         empty = Empty()
         land.publish(empty)
@@ -121,6 +128,7 @@ def on_press(key):
     elif key.char == 'c':
         print('Circle')
         circle_mode = True
+	trajectory_mode = False
 
 
 def on_release(key):
@@ -169,6 +177,62 @@ def get_odometry(msg):
         global_pose[3] = yaw
         print(global_pose)
 
+def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
+    kp_x, kp_y, kp_theta = 0.4, 0.4, 0.1
+    threshold_distance = 0.05
+    threshold_angle = np.pi/10
+
+    # Remove z from both pose lists, since it won't change
+    pose_current_list.pop(2) 
+    pose_goal_list.pop(2)
+
+    # Convert poses to vertical np array vectors
+    pose_current = np.transpose(np.array([pose_current_list], np.float32))
+    pose_goal = np.transpose(np.array([pose_goal_list], np.float32))
+    
+    # Obtain delta of goal and current poses (direction vector in the global frame)
+    delta_pose = pose_goal - pose_current    
+    #print(delta_pose)
+    
+    # Calculate Euclidian distance from quadcopter to goal
+    linear_distance =  np.sqrt(np.square(delta_pose[0][0]) + np.square(delta_pose[1][0]))
+    #print(linear_distance)
+
+    # Check if quadcopter is near the goal
+    if linear_distance <= threshold_distance:
+        diff_theta = delta_pose[2][0]
+        
+        # Check if the quadcopter is almost oriented as the goal to stop moving it
+        if abs(diff_theta) <= threshold_angle:
+            return [0.0, 0.0, 0.0, 0.0, True]
+        
+        # Correct orientation by considering rotation speed only 
+        v_theta = kp_theta * delta_pose[2][0]
+        if abs(v_theta) > 1.0:
+            v_theta /= abs(v_theta) # Transform theta speed to 1 or -1 if it is too big
+        return [0.0, 0.0, 0.0, v_theta, False]
+
+    # Check current theta of quadcopter
+    theta_current = pose_current[2][0]
+    
+    # Multiply the difference of poses times the global-to-local rotation matrix 
+    rotation_matrix = np.array([[np.cos(theta_current), np.sin(theta_current), 0],[-np.sin(theta_current), np.cos(theta_current), 0],[0, 0, 1]], np.float32)
+    delta_pose_local = np.matmul(rotation_matrix, delta_pose)
+
+    # Calculate necessary x speed
+    v_x = kp_x * delta_pose_local[0][0]
+    if abs(v_x) > 1.0:
+        v_x /= abs(v_x) # Transform x speed to 1 or -1 if it is too big
+
+    # Calculate necessary y speed
+    v_y = kp_y * delta_pose_local[1][0]
+    if abs(v_y) > 1.0:
+        v_y /= abs(v_y) # Transform y speed to 1 or -1 if it is too big
+
+    #print(delta_pose_local)
+    #print(rotation_matrix)
+    return [v_x, v_y, 0.0, 0.0, False]
+
 if __name__=="__main__":
     key_listener = Listener(on_press=on_press, on_release=on_release) 
     pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 8)
@@ -208,6 +272,27 @@ if __name__=="__main__":
                     pub.publish(twist)
                     print(x,y,z,th)
                     rate.sleep() # Ensure the circle_mode loops 5 times per second
+	    if(trajectory_mode):
+                pose_goal = [1.3, 1.5, 0.0, 0.5]
+		while(trajectory_mode):
+		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
+		    if required_speeds[4]:
+			# Made it to the goal
+			twist = Twist()
+                        twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
+                        pub.publish(twist)
+			trajectory_mode = False
+                        empty = Empty()
+                        land.publish(empty)
+			trajectory_mode = False
+		        break
+		    else:
+			twist = Twist()
+                        twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
+                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
+                        pub.publish(twist)
+		    rate.sleep() # Ensure the circle_mode loops 5 times per second	
             rate.sleep()
         print("Waiting for key controller to end")
         key_listener.join()
