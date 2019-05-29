@@ -45,12 +45,49 @@ def FindRedFrame(img):
     img_contours, contours, hierarchy = cv2.findContours(closing, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     # Sort contours by size and extract the second longest contour
-    contours = sorted(contours, key = cv2.contourArea, reverse = True)[1]
+    contours = sorted(contours, key = cv2.contourArea, reverse = True)
+    if countours is not None and len(contours) > 1:
+        cont = contours[1]
+        return cont
+    return None
+
+def DrawRedFrame(contourFrame, imgFrame):
+    if contourFrame is None:
+        cv2.namedWindow("Red Frame", cv2.WINDOW_NORMAL)  
+        cv2.imshow("Red Frame", imgFrame)
+        cv2.waitKey(3)
+        return
+    
+    # Get bounding rotated rectangle
+    #rect = cv2.minAreaRect(contourFrame[1])
+    rect = cv2.minAreaRect(contourFrame)
+    box = cv2.boxPoints(rect)
+    box = np.int0(box)
+
+    # Compare areas between bounding figures
+    #trapezoid_area = cv2.contourArea(contourFrame[1])
+    trapezoid_area = cv2.contourArea(contourFrame)
+    rectangle_area = cv2.contourArea(box)
+    #print("Area ratio: ", trapezoid_area/rectangle_area)
+
+    # Find centroid of rectangle
+    center_x = rect[0][0]
+    center_y = rect[0][1]
+    print(center_x, center_y)
+    cv2.circle(imgFrame, (round(center_x), round(center_y)), 6, (0,0,255), -1)
+    
+    # Draw inner contour and its bounding rectangle
+    #imgFrame = cv2.drawContours(imgFrame, [contours[1]], -1, (0,255,0), 3)
+    imgFrame = cv2.drawContours(imgFrame, [contourFrame], -1, (0,255,0), 3)
+    imgFrame = cv2.drawContours(imgFrame, [box], -1, (255,0,0), 3)
+    cv2.namedWindow("Red Frame", cv2.WINDOW_NORMAL)  
+    cv2.imshow("Red Frame", imgFrame)
+    cv2.waitKey(3)
+    #cv2.resizeWindow("Red Frame", (400,300))
 
 if __name__ == "__main__":
     img = cv2.imread("RedFrameSample6.jpg", 1)
     
-
     # Get bounding polygon of inner contour
     #peri = cv2.arcLength(contours[1], True)
     #approx = cv2.approxPolyDP(contours[1], 0.001 * peri, True)
