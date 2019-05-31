@@ -7,12 +7,16 @@ import rospy
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import Empty
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import sys
 import numpy as np
+import cv2
 from time import sleep
 from pynput.keyboard import Key, Listener
+import RedFrameDetector
 
 msg = """
 Reading from the keyboard  and Publishing to Twist!
@@ -62,6 +66,7 @@ circle_mode = False
 trajectory_mode = False
 controller_on = True
 global_pose = [0.0, 0.0, 0.0, 0.0]
+bridge = CvBridge()
 
 def QuadLand():
     global land
@@ -192,6 +197,22 @@ def get_odometry(msg):
         global_pose[3] = yaw
         print("Global Pose: ", global_pose)
 
+def get_image(ros_img):
+    try:
+        cv_image = bridge.imgmsg_to_cv2(ros_img, "bgr8")
+    except CvBridgeError as e:
+        print(e)
+    
+    cont = RedFrameDetector.FindRedFrame(cv_image)
+    RedFrameDetector.DrawRedFrame(cont, cv_image)
+
+    #(rows, cols, channels) = cv_image.shape
+    #cv2.imshow("Image window", cv_image)
+    #cv2.waitKey(3)
+
+    # print(cv_image.shape)
+    return
+
 def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
     kp_x, kp_y, kp_theta = 0.05, 0.05, 0.05
     threshold_distance = 0.08
@@ -259,6 +280,7 @@ if __name__=="__main__":
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
     reset = rospy.Publisher('bebop/reset', Empty, queue_size = 1)
     odom = rospy.Subscriber('bebop/odom', Odometry, get_odometry)
+    camera = rospy.Subscriber('bebop/image_raw', Image, get_image) 
     rospy.init_node('teleop_twist_keyboard')
 
     speed = rospy.get_param("~speed", 0.2)

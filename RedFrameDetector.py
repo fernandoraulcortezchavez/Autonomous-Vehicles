@@ -46,7 +46,7 @@ def FindRedFrame(img):
 
     # Sort contours by size and extract the second longest contour
     contours = sorted(contours, key = cv2.contourArea, reverse = True)
-    if countours is not None and len(contours) > 1:
+    if contours is not None and len(contours) > 1:
         cont = contours[1]
         return cont
     return None
@@ -74,7 +74,7 @@ def DrawRedFrame(contourFrame, imgFrame):
     center_x = rect[0][0]
     center_y = rect[0][1]
     print(center_x, center_y)
-    cv2.circle(imgFrame, (round(center_x), round(center_y)), 6, (0,0,255), -1)
+    cv2.circle(imgFrame, (int(round(center_x)), int(round(center_y))), 6, (0,0,255), -1)
     
     # Draw inner contour and its bounding rectangle
     #imgFrame = cv2.drawContours(imgFrame, [contours[1]], -1, (0,255,0), 3)
