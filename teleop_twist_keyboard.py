@@ -214,8 +214,13 @@ def get_image(ros_img):
     return
 
 def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
-    kp_x, kp_y, kp_theta = 0.05, 0.05, 0.05
-    threshold_distance = 0.08
+    if pose_goal_list[2] == 1:
+        theta_current = pose_current_list[3] 
+        theta_goal = pose_goal_list[3]
+        return TurnPID(theta_current, theta_goal)
+    #kp_x, kp_y, kp_theta = 0.05, 0.05, 0.05
+    kp_x, kp_y, kp_theta = 0.068, 0.068, 0.25
+    threshold_distance = 0.20
     threshold_angle = np.pi/8
 
     pose_current = np.array([[pose_current_list[0]], [pose_current_list[1]], [pose_current_list[3]]], np.float32) 
@@ -252,13 +257,11 @@ def DetermineControllerSpeeds(pose_current_list, pose_goal_list):
 
     # Calculate necessary x speed
     v_x = kp_x * delta_pose_local[0][0]
-    if abs(v_x) > 1.0:
-        v_x /= abs(v_x) # Transform x speed to 1 or -1 if it is too big
-
-    # Calculate necessary y speed
     v_y = kp_y * delta_pose_local[1][0]
-    if abs(v_y) > 1.0:
-        v_y /= abs(v_y) # Transform y speed to 1 or -1 if it is too big
+    max_speed = max(abs(v_x), (v_y))
+    if max_speed > 1.0:
+        v_x /= max_speed
+        v_y /= max_speed
 
     #print(delta_pose_local)
     #print(rotation_matrix)
@@ -273,6 +276,59 @@ def GenerateCirclePoses(radius, num_points, angle):
         poses_list.append(pose)
     return poses_list
 
+def GenerateCircuitPoses(gpose):
+    x0, y0, z0, theta0 = gpose[0], gpose[1], gpose[2], gpose[3]
+    reference_pose = [x0, y0, theta0]
+    pose1 = [1.5, 0, 0, theta0]
+    pose2 = [3.5, 0, 0, theta0]
+    pose3 = [3.5, -1, 0, theta0]
+    pose4 = [0, 0, 1, np.unwrap([theta0+np.pi])[0]]
+    pose5 = [2, -1, 0, np.unwrap([theta0+np.pi])[0]]
+    pose6 = [0, -1, 0, np.unwrap([theta0+np.pi])[0]]
+    pose7 = [0, 0, 0, theta0]
+    relative_poses_list = [pose1, pose2, pose3, pose4, pose5, pose6, pose7]
+    print(relative_poses_list)
+    print("Generated local points")
+    rotation_matrix = np.array([[np.cos(theta0), -np.sin(theta0), 0],[np.sin(theta0), np.cos(theta0), 0],[0, 0, 1]], np.float32)
+    global_poses_list = []
+    for i in range(len(relative_poses_list)):
+        # Rotation matrix local to global
+        prod = np.matmul(rotation_matrix, relative_poses_list[i][0:3])
+        new_global_pose = prod + reference_pose
+        xg, yg, thetag = new_global_pose[0], new_global_pose[1], new_global_pose[2]
+        cur_pose = [xg, yg, 0.0, thetag]
+        global_poses_list.append(cur_pose)
+    print("Global goal poses")
+    print(global_poses_list)
+    return global_poses_list 
+
+def GenerateCircuitPoints(gpose):
+    x0, y0, z0, theta0 = gpose[0], gpose[1], gpose[2], gpose[3]
+    pose1 = [4.1+x0, 0+y0, 0, theta0]
+    pose2 = [4.1+x0, 0+y0, 0, theta0]
+    pose3 = [4.1+x0, -3+y0, 0, theta0]
+    pose4 = [4.1+x0, -3+y0, 1, np.unwrap([np.pi])[0]] #turn
+    pose5 = [2+x0, -3+y0, 0, np.unwrap([theta0+np.pi])[0]]
+    pose6 = [0+x0, -3+y0, 0, np.unwrap([theta0+np.pi])[0]]
+    pose7 = [0+x0, 0+y0, 0, theta0]
+    poses_list = [pose1, pose2, pose3, pose4, pose5, pose6, pose7]
+    print("poses_list")
+    print(poses_list)
+    return poses_list
+
+def TurnPID(theta_current, theta_goal):
+    kp_theta = 0.3
+    threshold_angle = np.pi/15
+# Check if the quadcopter is almost oriented as the goal to stop moving it
+    if abs(diff_theta) <= threshold_angle:
+        return [0.0, 0.0, 0.0, 0.0, True]
+
+# Correct orientation by considering rotation speed only 
+    v_theta = kp_theta * (theta_goal - theta_current)
+    if abs(v_theta) > 1.0:
+        v_theta /= abs(v_theta) # Transform theta speed to 1 or -1 if it is too big
+        return [0.0, 0.0, 0.0, v_theta, False]
+
 if __name__=="__main__":
     key_listener = Listener(on_press=on_press, on_release=on_release) 
     pub = rospy.Publisher('bebop/cmd_vel', Twist, queue_size = 10)
@@ -280,12 +336,12 @@ if __name__=="__main__":
     land = rospy.Publisher('bebop/land', Empty, queue_size = 1)
     reset = rospy.Publisher('bebop/reset', Empty, queue_size = 1)
     odom = rospy.Subscriber('bebop/odom', Odometry, get_odometry)
-    camera = rospy.Subscriber('bebop/image_raw', Image, get_image) 
+    #camera = rospy.Subscriber('bebop/image_raw', Image, get_image) 
     rospy.init_node('teleop_twist_keyboard')
 
     speed = rospy.get_param("~speed", 0.2)
     turn = rospy.get_param("~turn", 1.0)
-    rate = rospy.Rate(10)
+    rate = rospy.Rate(8)
     x = 0
     y = 0
     z = 0
@@ -298,7 +354,6 @@ if __name__=="__main__":
         #print(vels(speed,turn))
         print("STARTING")
         while(controller_on):
-            print("Main loop")
             print(controller_on)
             #if(circle_mode):
             #    x = 0.2
@@ -341,37 +396,39 @@ if __name__=="__main__":
                         pub.publish(twist)
                      
                 
-	    if(trajectory_mode):
-                pose_goal = [0.80, -1.0, 0.0, global_pose[3]]
-                halfWay = False
-		while(trajectory_mode):
+            if(trajectory_mode):
+                print("Trajectory")
+                poses_circuit = GenerateCircuitPoints(global_pose)
+                goal_number = 0
+                pose_goal = poses_circuit[0]
+                while(trajectory_mode):
 		    required_speeds = DetermineControllerSpeeds(global_pose, pose_goal)
-                    print("Required speeds: ", required_speeds)
-		    if required_speeds[4]:
+		    if required_speeds[4] and goal_number >= len(poses_circuit)-1:
+                        print("FINISHED")
 			# Made it to the goal
 			twist = Twist()
                         twist.linear.x = 0; twist.linear.y = 0; twist.linear.z = 0
                         twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = 0
                         pub.publish(twist)
                         QuadLand()
+                        circle_mode = False
                         sleep(4)
-                        print("MADE IT")
- 
-                        # Check if it finished the first half of trajectory
-                        if not halfWay:
-                            halfWay = True
-                            pose_goal = [0.0, 0.0, 0.0, 0.0]
-                            QuadTakeoff()
+                    elif required_speeds[4] and goal_number < len(poses_circuit)-1:
+                        # Reached one of the points
+                        goal_number += 1
+                        pose_goal = poses_circuit[goal_number] 
+                    else:
+                        # Try to reach next goal
+                        twist = Twist()
+                        if goal_number < 4:
+                            twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
+                            twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
                         else:
-                            # Finished both halves of trajectory
-                            trajectory_mode = False
-		            break
-		    else:
-			twist = Twist()
-                        twist.linear.x = required_speeds[0]; twist.linear.y = required_speeds[1]; twist.linear.z = 0
-                        twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
+                            twist.linear.x = -1*required_speeds[0]; twist.linear.y = -1*required_speeds[1]; twist.linear.z = 0
+                            twist.angular.x = 0; twist.angular.y = 0; twist.angular.z = required_speeds[3]
                         pub.publish(twist)
-		    rate.sleep() # Ensure the circle_mode loops 5 times per second	
+              
+
             rate.sleep()
         print("Waiting for key controller to end")
         key_listener.join()
